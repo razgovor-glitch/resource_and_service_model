@@ -1,0 +1,65 @@
+# Единый словарь: команды, окружения, критичность.
+# Все значения из источников (теги vCenter, группы Zabbix, labels K8s...) приводятся к этим ключам.
+# Неизвестные значения не теряются: они получают пониженный вес и попадают в отчёт «Пополнить словари».
+
+teams:
+  platform:
+    aliases: [platform-team, devops, infra, sre, k8s-team, "платформа"]
+    oncall: "#platform-oncall"
+    lead: a.smirnov
+  payments:
+    aliases: [pay, payment, payments-team, "платежи"]
+    oncall: "#payments-oncall"
+    lead: m.sidorova
+  billing:
+    aliases: [billing-team, "биллинг"]
+    oncall: "#billing-oncall"
+    lead: d.orlov
+  erp:
+    aliases: [1c, "1с", erp-team, "бухгалтерия-ит"]
+    oncall: "#erp-support"
+    lead: i.petrov
+  crm:
+    aliases: [crm-team]
+    oncall: "#crm-support"
+    lead: s.kuznetsov
+  data:
+    aliases: [dwh, bigdata, analytics, data-team]
+    oncall: "#data-oncall"
+    lead: a.ivanov
+  web:
+    aliases: [frontend, portal, web-team]
+    oncall: "#web-oncall"
+    lead: k.volkov
+  it-ops:
+    aliases: [itops, helpdesk, office-it, "ит-отдел"]
+    oncall: "#it-helpdesk"
+    lead: p.morozov
+  security:
+    aliases: [sec, infosec, secops, "иб"]
+    oncall: "#security-oncall"
+    lead: e.belova
+
+environments:
+  production: [prod, prd, production, "прод", p]
+  staging: [stage, stg, staging, preprod, uat]
+  development: [dev, develop, development, test, tst, qa, lab]
+
+criticality:
+  tier-1: [critical, tier1, t1, "1", mission-critical]
+  tier-2: [tier2, t2, "2", important]
+  tier-3: [tier3, t3, "3", low]
+  tier-4: [tier4, t4, "4", best-effort, sandbox]
+
+# Модель поддержки выводится из критичности.
+support_model:
+  tier-1: 24x7
+  tier-2: 8x5+oncall
+  tier-3: 8x5
+  tier-4: best-effort
+
+# Для непродовых окружений критичность берётся из окружения, а не из каталога сервиса
+# (dev-стенд billing-core не должен быть tier-1).
+env_criticality:
+  staging: tier-3
+  development: tier-4

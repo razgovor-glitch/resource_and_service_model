@@ -1,0 +1,37 @@
+# Пример: namespace размечен правильно, у Deployment забыли label service/env.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments
+  labels:
+    team: payments
+    service: payment-api
+    env: prod
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-api
+  namespace: payments
+  labels:
+    team: payments
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app: payment-api}
+  template:
+    metadata:
+      labels: {app: payment-api}
+    spec:
+      containers:
+        - name: app
+          image: registry.example.com/payments/payment-api:1.4.2
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: recommendations
+  labels:
+    team: ml-team          # такой команды нет в dictionary.yaml
+    service: recsys
+    env: prod

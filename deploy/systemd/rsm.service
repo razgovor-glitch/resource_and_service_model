@@ -1,0 +1,15 @@
+# /etc/systemd/system/rsm.service — один прогон RSM (запускается таймером rsm.timer)
+[Unit]
+Description=RSM: discovery и атрибуция владельцев серверов
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=rsm
+Group=rsm
+WorkingDirectory=/opt/rsm
+EnvironmentFile=/etc/rsm/env
+ExecStart=/opt/rsm/scripts/nightly.sh
+TimeoutStartSec=3h
+Nice=10

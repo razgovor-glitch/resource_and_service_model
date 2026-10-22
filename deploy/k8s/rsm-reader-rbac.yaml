@@ -1,0 +1,57 @@
+# Read-only доступ коллектора RSM к кластеру. Секреты и ConfigMap НЕ читаются.
+# kubectl --context <ctx> apply -f deploy/k8s/rsm-reader-rbac.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rsm-system
+  labels:
+    team: platform
+    service: rsm
+    env: prod
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rsm-reader
+  namespace: rsm-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: rsm-reader
+rules:
+  - apiGroups: [""]
+    resources: [nodes, namespaces, pods, services, persistentvolumeclaims, persistentvolumes]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets, replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rsm-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: rsm-reader
+subjects:
+  - kind: ServiceAccount
+    name: rsm-reader
+    namespace: rsm-system
+---
+# Долгоживущий токен для внешнего коллектора (ротация — удалить Secret и создать заново).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rsm-reader-token
+  namespace: rsm-system
+  annotations:
+    kubernetes.io/service-account.name: rsm-reader
+type: kubernetes.io/service-account-token

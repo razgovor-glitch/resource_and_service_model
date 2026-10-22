@@ -1,0 +1,22 @@
+# «Прибить» подтверждённого владельца к самому хосту: /etc/ansible/facts.d/rsm.fact.
+# Дальше каждый сбор фактов приносит его как ansible_local.rsm (правило ansible-declared-owner).
+# Владельцы задаются переменными инвентори: rsm_team, rsm_service, rsm_environment.
+#   ansible-playbook -i inventories/prod deploy/ansible/rsm_owner_fact.yml --limit 'legacy'
+- name: RSM — записать владельца на хост
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Каталог локальных фактов
+      ansible.builtin.file:
+        path: /etc/ansible/facts.d
+        state: directory
+        mode: "0755"
+      when: rsm_team is defined
+
+    - name: rsm.fact
+      ansible.builtin.copy:
+        dest: /etc/ansible/facts.d/rsm.fact
+        mode: "0644"
+        content: "{{ {'team': rsm_team, 'service': rsm_service | default(''), 'environment': rsm_environment | default('')} | to_nice_json }}"
+      when: rsm_team is defined

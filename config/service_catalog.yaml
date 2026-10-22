@@ -1,0 +1,92 @@
+# Каталог бизнес-сервисов (сервисный слой). Ведётся вручную/из Backstage; Git-репозитории
+# с catalog-info.yaml дополняют его автоматически (см. rsm/collectors/git.py).
+#
+# hosts           — регэкспы имён хостов → service (порождают правила с весом 0.85)
+# k8s_namespaces  — namespaces → service (вес 0.9)
+# aliases         — как сервис называют в тегах/группах/именах
+# Владелец сервиса автоматически становится кандидатом во владельцы его хостов.
+
+services:
+  payment-api:
+    owner_team: payments
+    criticality: tier-1
+    description: API приёма платежей (Kubernetes)
+    repo: gitlab.example.com/payments/payment-api
+    k8s_namespaces: [payments]
+    aliases: [payapi]
+
+  payment-gateway-legacy:
+    owner_team: payments
+    criticality: tier-1
+    description: Старый платёжный шлюз на ВМ
+    hosts: ['^paygw\d+', '^pay-db-\d+']
+    aliases: [paygw, paydb, payments-legacy]
+
+  billing-core:
+    owner_team: billing
+    criticality: tier-1
+    k8s_namespaces: [billing]
+    hosts: ['^(prod|stg)-billing-']
+    aliases: [billing]
+
+  1c-erp:
+    owner_team: erp
+    criticality: tier-2
+    hosts: ['^srv-1c-']
+    aliases: [1c, "1с"]
+
+  crm-legacy:
+    owner_team: crm
+    criticality: tier-2
+    hosts: ['^crm-app-\d+', '^oradb-crm-\d+']
+    aliases: [crm]
+
+  data-warehouse:
+    owner_team: data
+    criticality: tier-2
+    hosts: ['^dwh-node-\d+', '^airflow-\d+']
+    k8s_namespaces: [data-pipelines]
+    aliases: [dwh, airflow]
+
+  data-streaming:
+    owner_team: data
+    criticality: tier-2
+    hosts: ['^kafka-\d+']
+    aliases: [kafka]
+
+  web-portal:
+    owner_team: web
+    criticality: tier-2
+    hosts: ['^(prod|stg)-web-portal-']
+    k8s_namespaces: [web-portal]
+
+  kubernetes-platform:
+    owner_team: platform
+    # критичность нод выводится из окружения кластера и из нагрузок на них
+    description: Kubernetes-кластеры (ноды, control plane, системные namespaces)
+
+  monitoring:
+    owner_team: platform
+    criticality: tier-2
+    hosts: ['^mon-', '^prom-\d+', '^grafana-\d+', '^elk-\d+']
+    k8s_namespaces: [monitoring]
+
+  ci-runners:
+    owner_team: platform
+    criticality: tier-3
+    hosts: ['^gitlab-runner-\d+']
+
+  legacy-devtools:
+    owner_team: platform
+    criticality: tier-3
+    description: SVN, Redmine и прочее наследие (без hosts — только через подтверждение)
+
+  office-infra:
+    owner_team: it-ops
+    criticality: tier-2
+    hosts: ['^dc\d+$', '^fs\d+$', '^print\d+$', '^wsus\d+$']
+
+  security-tools:
+    owner_team: security
+    criticality: tier-2
+    hosts: ['^siem-\d+', '^vault-\d+']

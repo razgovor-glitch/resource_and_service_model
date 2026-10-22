@@ -1,0 +1,4 @@
+# Ручные подтверждения владения (высший приоритет). host = hostname, FQDN или IP.
+# Пустые поля не переопределяют автоматические значения.
+host,owner_team,service,environment,criticality,confirmed_by,confirmed_at,comment
+backup-old-01,it-ops,office-infra,production,tier-3,p.morozov,2026-09-10,старый rsync-бэкап бухгалтерии

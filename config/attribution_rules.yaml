@@ -1,0 +1,153 @@
+# Правила атрибуции: «чей это сервер / namespace».
+#
+# when — все условия должны выполниться (AND):
+#   match:   {поле: регэксп}         поля: hostname, fqdn, vm_name, os, annotation, k8s_cluster, k8s_role,
+#                                    vcenter_cluster, folder, datacenter, node_pool, name (у namespace)...
+#   tag:     {key: [..], source: X}  теги источников: vcenter-теги/атрибуты, zabbix-теги, ansible hostvars/local facts
+#   label:   {key: [..]}             labels Kubernetes (ноды / namespaces)
+#   group:   {pattern: re, source: X} группы Ansible / Zabbix
+#   subnet:  CIDR или список
+#   port / ports_all: [..]           открытые порты (nmap)
+#   service_running: регэксп          systemd-сервисы (ansible service_facts)
+#   source / only_source: [..]       кто видит хост
+# set — значения; {имя} подставляет именованную группу регэкспа или {value} тега/label.
+#   owner_person — логин человека, переводится в команду через people.yaml.
+# weight — сила улики (0..1). Улики складываются: 1 - Π(1 - w).
+# applies_to — host (по умолчанию) и/или namespace.
+#
+# Правила из каталога сервисов (hosts / k8s_namespaces) добавляются автоматически.
+
+rules:
+  # ───────── 1. Явные метки владения — самые сильные автоматические улики ─────────
+  - name: vcenter-tag-owner
+    when: {tag: {key: [owner, team, owner_team], source: vcenter}}
+    set: {owner_team: "{value}"}
+    weight: 0.9
+  - name: vcenter-tag-service
+    when: {tag: {key: [service, project, app], source: vcenter}}
+    set: {service: "{value}"}
+    weight: 0.85
+  - name: vcenter-tag-env
+    when: {tag: {key: [env, environment], source: vcenter}}
+    set: {environment: "{value}"}
+    weight: 0.9
+  - name: ansible-declared-owner        # hostvars инвентори или /etc/ansible/facts.d/rsm.fact
+    when: {tag: {key: [owner_team, team, fact_team], source: ansible}}
+    set: {owner_team: "{value}"}
+    weight: 0.85
+  - name: ansible-declared-service
+    when: {tag: {key: [service, fact_service], source: ansible}}
+    set: {service: "{value}"}
+    weight: 0.85
+  - name: zabbix-tag-team
+    when: {tag: {key: [team, owner], source: zabbix}}
+    set: {owner_team: "{value}"}
+    weight: 0.75
+  - name: k8s-node-label-team           # выделенные node pool'ы команд
+    when: {label: {key: [team, owner]}}
+    set: {owner_team: "{value}"}
+    weight: 0.9
+
+  # ───────── 2. Kubernetes: ноды — платформе, нагрузки — командам ─────────
+  - name: k8s-nodes-belong-to-platform
+    when: {match: {k8s_cluster: '.+'}}
+    set: {owner_team: platform, service: kubernetes-platform}
+    weight: 0.95
+  - name: k8s-cluster-environment
+    applies_to: [host, namespace]
+    when: {match: {k8s_cluster: '^k8s-(?P<env>prod|stage|dev)'}}
+    set: {environment: "{env}"}
+    weight: 0.95
+  - name: k8s-node-role
+    when: {match: {k8s_role: '(?P<r>control-plane|worker)'}}
+    set: {role: "k8s-{r}"}
+    weight: 0.95
+
+  # ───────── 3. Группы мониторинга и инвентаря ─────────
+  - name: zabbix-team-hostgroup
+    when: {group: {pattern: '^Teams/(?P<team>[^/]+)', source: zabbix}}
+    set: {owner_team: "{team}"}
+    weight: 0.7
+  - name: ansible-group-service-env     # billing_core_prod → billing-core / prod
+    when: {group: {pattern: '^(?P<service>[a-z0-9_-]+?)_(?P<env>prod|stage|dev)$', source: ansible}}
+    set: {service: "{service}", environment: "{env}"}
+    weight: 0.7
+
+  # ───────── 4. Конвенции имён ─────────
+  - name: hostname-convention           # prod-billing-app-01, dev-web-portal-07
+    when: {match: {hostname: '^(?P<env>prod|stg|dev)-(?P<service>[a-z0-9-]+?)(?:-(?:app|db|cache))?-\d+$'}}
+    set: {environment: "{env}", service: "{service}"}
+    weight: 0.6
+
+  # ───────── 5. Сеть (слабые улики: подсети со временем «расползаются») ─────────
+  - name: subnet-payments
+    when: {subnet: 10.20.30.0/24}
+    set: {owner_team: payments}
+    weight: 0.5
+  - name: subnet-erp
+    when: {subnet: 10.30.0.0/24}
+    set: {owner_team: erp}
+    weight: 0.5
+  - name: subnet-office
+    when: {subnet: 10.60.0.0/24}
+    set: {owner_team: it-ops}
+    weight: 0.5
+  - name: subnet-dev
+    when: {subnet: 10.120.0.0/16}
+    set: {environment: development}
+    weight: 0.6
+  - name: subnet-prod
+    when: {subnet: [10.20.0.0/16, 10.30.0.0/16, 10.40.0.0/16, 10.50.0.0/24, 10.60.0.0/24, 10.70.0.0/16, 10.80.0.0/16]}
+    set: {environment: production}
+    weight: 0.5
+
+  # ───────── 6. Люди из описаний ВМ и аннотаций ─────────
+  - name: annotation-responsible-person
+    applies_to: [host, namespace]
+    when: {match: {annotation: '(?:owner|ответственный|владелец|responsible)\s*[:=]\s*(?P<person>[a-z]+\.[a-z]+)'}}
+    set: {owner_person: "{person}"}
+    weight: 0.6
+
+  # ───────── 7. Роль по портам/процессам (не владелец, но ускоряет триаж) ─────────
+  - {name: role-postgres, when: {port: [5432]}, set: {role: db-postgresql}, weight: 0.8}
+  - {name: role-postgres-svc, when: {service_running: '^postgresql'}, set: {role: db-postgresql}, weight: 0.9}
+  - {name: role-oracle, when: {port: [1521]}, set: {role: db-oracle}, weight: 0.8}
+  - {name: role-mssql, when: {port: [1433]}, set: {role: db-mssql}, weight: 0.8}
+  - {name: role-mysql, when: {port: [3306]}, set: {role: db-mysql}, weight: 0.8}
+  - {name: role-1c, when: {port: [1540, 1541]}, set: {role: 1c-server}, weight: 0.85}
+  - {name: role-kafka, when: {port: [9092]}, set: {role: kafka}, weight: 0.8}
+  - {name: role-elasticsearch, when: {port: [9200]}, set: {role: elasticsearch}, weight: 0.7}
+  - {name: role-ad-dc, when: {ports_all: [88, 389, 445]}, set: {role: windows-ad-dc}, weight: 0.9}
+  - {name: role-windows, when: {port: [3389]}, set: {role: windows-server}, weight: 0.5}
+  - {name: role-web, when: {port: [80, 443]}, set: {role: web}, weight: 0.4}
+  - {name: role-svn, when: {port: [3690]}, set: {role: svn}, weight: 0.8}
+  - {name: role-ftp, when: {port: [21]}, set: {role: ftp}, weight: 0.7}
+  - {name: role-smtp, when: {port: [25]}, set: {role: smtp-relay}, weight: 0.7}
+  - {name: role-hypervisor, when: {port: [16509]}, set: {role: kvm-hypervisor}, weight: 0.8}
+  - {name: role-printer, when: {port: [9100], only_source: [nmap]}, set: {role: printer}, weight: 0.5}
+  - name: role-unmanaged                # виден только сканеру — shadow IT
+    when: {only_source: [nmap, dns]}
+    set: {role: unmanaged}
+    weight: 0.6
+
+  # ───────── 8. Kubernetes namespaces ─────────
+  - name: ns-label-team
+    applies_to: namespace
+    when: {label: {key: [team, owner]}}
+    set: {owner_team: "{value}"}
+    weight: 0.95
+  - name: ns-label-service
+    applies_to: namespace
+    when: {label: {key: [service, app.kubernetes.io/part-of]}}
+    set: {service: "{value}"}
+    weight: 0.95
+  - name: ns-label-env
+    applies_to: namespace
+    when: {label: {key: [env, environment]}}
+    set: {environment: "{value}"}
+    weight: 0.95
+  - name: ns-system
+    applies_to: namespace
+    when: {match: {name: '^(kube-system|kube-public|kube-node-lease|default|ingress-nginx|argocd|cert-manager|kyverno|calico-system|tigera-operator|rsm-system)$'}}
+    set: {owner_team: platform, service: kubernetes-platform}
+    weight: 0.9

@@ -1,0 +1,25 @@
+# Сбор фактов для RSM (только чтение на хостах).
+#   rsm fetch ansible -i inventories/prod
+# или напрямую:
+#   ansible-playbook -i inventories/prod deploy/ansible/collect_facts.yml -e rsm_facts_dir=$PWD/data/raw/ansible/facts
+- name: RSM — сбор фактов
+  hosts: all
+  gather_facts: true
+  become: false
+  ignore_unreachable: true
+  vars:
+    rsm_facts_dir: "{{ playbook_dir }}/../../data/raw/ansible/facts"
+  tasks:
+    - name: Список systemd-сервисов (помогает определить роль хоста)
+      ansible.builtin.service_facts:
+      become: true
+      ignore_errors: true
+      when: ansible_facts['system'] == 'Linux'
+
+    - name: Сохранить факты на контроллер
+      ansible.builtin.copy:
+        content: "{{ {'ansible_facts': ansible_facts} | to_json }}"
+        dest: "{{ rsm_facts_dir }}/{{ inventory_hostname }}"
+        mode: "0644"
+      delegate_to: localhost
+      become: false

@@ -1,0 +1,84 @@
+# Главная конфигурация RSM. Значения по умолчанию подобраны под демо — правьте под себя.
+data_dir: data
+
+# Какие источники разбирать (`rsm collect`). Выключите те, которых у вас нет.
+sources:
+  nmap:    {enabled: true}
+  dns:     {enabled: true}
+  ansible: {enabled: true}
+  vcenter: {enabled: true}
+  zabbix:  {enabled: true}
+  k8s:     {enabled: true}
+  git:     {enabled: true}
+  manual:  {enabled: true}   # config/ownership_overrides.csv + data/raw/netbox/confirmed.json
+
+# Ключ склейки по имени: short (app-01) или fqdn (app-01.corp.example.com).
+# short удобнее, пока в компании нет одинаковых коротких имён в разных доменах.
+hostname_key: short
+
+# Имена, по которым склеивать нельзя (регэкспы, полное совпадение): дефолтные имена образов
+# и автоматические PTR вида host-10-1-2-3.
+hostname_blacklist:
+  - 'localhost(\.localdomain)?'
+  - '(ubuntu|debian|centos|rhel|server|host|node|vm|template|default|unknown)'
+  - '(host|ip|dhcp)-\d+-\d+-\d+-\d+.*'
+
+# IP, которые не являются идентичностью хоста: docker bridge, pod/service CIDR Kubernetes.
+ip_ignore:
+  - 172.17.0.0/16
+  - 10.244.0.0/16
+  - 10.96.0.0/12
+
+# Адреса, которые законно разделяются несколькими хостами (VIP keepalived, anycast) — не конфликт.
+ip_conflict_ignore: []
+
+# Чей атрибут главнее при расхождениях (первый — главный).
+precedence:
+  default:  [ansible, k8s, vcenter, zabbix, dns, nmap]
+  hostname: [ansible, k8s, vcenter, dns, zabbix, nmap]
+  fqdn:     [dns, ansible, vcenter, zabbix, k8s, nmap]
+  os:       [ansible, vcenter, k8s, zabbix, nmap]
+  cpu:      [ansible, vcenter, k8s, zabbix]
+  annotation: [vcenter]
+
+# Пороги уверенности атрибуции (noisy-OR по уликам).
+thresholds:
+  auto: 0.8                 # ≥ — владелец считается определённым автоматически
+  needs_confirmation: 0.4   # ≥ — кандидат есть, нужно подтверждение команды
+  conflict_margin: 0.25     # если второй кандидат ближе — конфликт
+
+lifecycle:
+  freshness_hours: 48            # liveness-сигнал старше — не считается
+  stale_after_days: 7
+  decommission_after_days: 30
+
+# Кому падают «ничейные» задачи (первичный триаж).
+triage_team: platform
+# Без этих полей CI считается неполной (задача fill-attributes владельцу).
+required_fields: [owner_team, service, environment, criticality]
+
+policy:
+  k8s_required_labels: [team, service, env]
+  terraform_required_tags: [owner_team, service, environment]
+  terraform_resource_types:
+    - aws_instance
+    - google_compute_instance
+    - azurerm_linux_virtual_machine
+    - azurerm_windows_virtual_machine
+    - vsphere_virtual_machine
+    - proxmox_vm_qemu
+    - yandex_compute_instance
+
+netbox:
+  url_env: NETBOX_URL       # имена переменных окружения, а не сами значения
+  token_env: NETBOX_TOKEN
+  site: dc1
+
+zabbix:
+  url_env: ZABBIX_URL
+  token_env: ZABBIX_TOKEN
+  auth_in_body: false       # true для Zabbix < 6.4
+  legacy_groups: false      # true для Zabbix < 6.2
+
+nmap:
+  ports: "21,22,25,53,80,88,389,443,445,873,1433,1521,1540,1541,2379,3306,3389,3690,5432,6443,8080,8443,9092,9100,9200,10250,10051"

@@ -1,0 +1,12 @@
+# Справочник «логин → команда». В проде выгружается из LDAP/AD (атрибут department)
+# или HR-системы. Нужен, чтобы превращать «Ответственный: i.petrov» из Notes ВМ во владение командой.
+people:
+  a.smirnov: platform
+  m.sidorova: payments
+  d.orlov: billing
+  i.petrov: erp
+  s.kuznetsov: crm
+  a.ivanov: data
+  k.volkov: web
+  p.morozov: it-ops
+  e.belova: security

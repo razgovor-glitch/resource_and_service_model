@@ -1,0 +1,44 @@
+# Пример .gitlab-ci.yml для репозитория RSM.
+#  * test        — юнит-тесты и проверка правил на демо-данных при каждом MR;
+#  * nightly     — ночной прогон на shell-раннере хоста RSM (там лежит data/ с историей CMDB
+#                  и есть сетевой доступ для nmap/Ansible). Запускается расписанием GitLab.
+stages: [test, discover]
+
+test:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - pip install -q -r requirements.txt
+  script:
+    - python -m unittest discover -s tests -v
+    - python -m rsm --data-dir /tmp/rsm-demo demo        # правила не сломали атрибуцию демо-парка
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+nightly:
+  stage: discover
+  tags: [rsm-shell]                     # shell-раннер на хосте RSM, рабочий каталог /opt/rsm
+  script:
+    - cd /opt/rsm && git pull --ff-only && .venv/bin/pip install -q -r requirements.txt
+    - cd /opt/rsm && scripts/nightly.sh
+    - cp -r /opt/rsm/data/reports "$CI_PROJECT_DIR/reports"
+  artifacts:
+    paths: [reports/]
+    expire_in: 30 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# ---------------------------------------------------------------------------------------------
+# Шаблон для РЕПОЗИТОРИЕВ ПРИЛОЖЕНИЙ (include в их .gitlab-ci.yml): не даёт вмержить
+# манифесты/Terraform без labels/tags владения.
+#
+# ownership-policy:
+#   stage: test
+#   image: alpine/helm:3.15.4
+#   before_script:
+#     - apk add --no-cache python3 py3-yaml git
+#     - git clone --depth 1 https://gitlab.example.com/platform/rsm.git /tmp/rsm
+#   script:
+#     - helm template chart/ > /tmp/rendered.yaml || true
+#     - cd /tmp/rsm && python3 -m rsm policy check "$CI_PROJECT_DIR/k8s" "$CI_PROJECT_DIR/terraform" /tmp/rendered.yaml

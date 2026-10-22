@@ -1,0 +1,11 @@
+# /etc/systemd/system/rsm.timer — ежедневно в 03:30
+[Unit]
+Description=Ежедневный прогон RSM
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

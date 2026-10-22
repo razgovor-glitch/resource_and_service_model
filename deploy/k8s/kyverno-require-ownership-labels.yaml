@@ -1,0 +1,50 @@
+# Kyverno: каждый namespace и workload обязан иметь labels владения.
+# Начинайте с Audit (только отчёты PolicyReport), через 2–4 недели — Enforce.
+# Синтаксис failureAction внутри validate — Kyverno ≥ 1.13; для старых версий используйте
+# spec.validationFailureAction: Audit.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-ownership-labels
+  annotations:
+    policies.kyverno.io/title: Require ownership labels
+    policies.kyverno.io/description: >-
+      Namespaces и workloads должны иметь labels team, service, env —
+      из них RSM строит сервисный слой и атрибуцию нагрузок на нодах.
+spec:
+  background: true
+  rules:
+    - name: namespace-ownership
+      match:
+        any:
+          - resources:
+              kinds: [Namespace]
+      exclude:
+        any:
+          - resources:
+              names: [kube-system, kube-public, kube-node-lease, default]
+      validate:
+        failureAction: Audit
+        message: "Namespace {{request.object.metadata.name}}: нужны labels team, service, env"
+        pattern:
+          metadata:
+            labels:
+              team: "?*"
+              service: "?*"
+              env: "?*"
+    - name: workload-team
+      match:
+        any:
+          - resources:
+              kinds: [Deployment, StatefulSet, DaemonSet, CronJob]
+      exclude:
+        any:
+          - resources:
+              namespaces: [kube-system]
+      validate:
+        failureAction: Audit
+        message: "{{request.object.kind}} {{request.object.metadata.name}}: нужен label team (или наследуйте от namespace)"
+        pattern:
+          metadata:
+            labels:
+              team: "?*"
